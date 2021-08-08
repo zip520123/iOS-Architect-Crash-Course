@@ -7,24 +7,6 @@ protocol ItemsService {
     func loadItems(completion: @escaping (Result<[ItemViewModel], Error>) -> Void)
 }
 
-
-struct CardsAPIItemsServiceAdapter: ItemsService {
-    let select: (Card) -> Void
-    let api: CardAPI
-    func loadItems(completion: @escaping (Result<[ItemViewModel], Error>) -> Void) {
-        api.loadCards { result in
-            DispatchQueue.mainAsyncIfNeeded {
-                completion(result.map({ (cards) in
-                    cards.map { (card) in
-                        ItemViewModel(card: card) {
-                            select(card)
-                        }
-                    }
-                }))
-            }
-        }
-    }
-}
 class ListViewController: UITableViewController {
 	var items = [ItemViewModel]()
     var service: ItemsService?
@@ -45,14 +27,7 @@ class ListViewController: UITableViewController {
 		refreshControl = UIRefreshControl()
 		refreshControl?.addTarget(self, action: #selector(refresh), for: .valueChanged)
 		
-		if fromCardsScreen {
-			shouldRetry = false
-			
-			title = "Cards"
-			
-			navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addCard))
-			
-		} else if fromSentTransfersScreen {
+		if fromSentTransfersScreen {
 			shouldRetry = true
 			maxRetryCount = 1
 			longDateStyle = true
@@ -83,9 +58,6 @@ class ListViewController: UITableViewController {
 		if fromFriendsScreen {
             service?.loadItems(completion: handleAPIResult)
 		} else if fromCardsScreen {
-            service = CardsAPIItemsServiceAdapter(select: { [weak self] (card) in
-                self?.select(card: card)
-            }, api: CardAPI.shared)
             service?.loadItems(completion: handleAPIResult)
 		} else if fromSentTransfersScreen || fromReceivedTransfersScreen {
 			TransfersAPI.shared.loadTransfers { [weak self, longDateStyle, fromSentTransfersScreen] result in
