@@ -3,10 +3,31 @@
 //
 
 import UIKit
+protocol ItemsService {
+    func loadItems(completion: @escaping (Result<[ItemViewModel], Error>) -> Void)
+}
 
+
+struct CardsAPIItemsServiceAdapter: ItemsService {
+    let select: (Card) -> Void
+    let api: CardAPI
+    func loadItems(completion: @escaping (Result<[ItemViewModel], Error>) -> Void) {
+        api.loadCards { result in
+            DispatchQueue.mainAsyncIfNeeded {
+                completion(result.map({ (cards) in
+                    cards.map { (card) in
+                        ItemViewModel(card: card) {
+                            select(card)
+                        }
+                    }
+                }))
+            }
+        }
+    }
+}
 class ListViewController: UITableViewController {
 	var items = [ItemViewModel]()
-	
+    var service: ItemsService?
 	var retryCount = 0
 	var maxRetryCount = 0
 	var shouldRetry = false
@@ -24,15 +45,7 @@ class ListViewController: UITableViewController {
 		refreshControl = UIRefreshControl()
 		refreshControl?.addTarget(self, action: #selector(refresh), for: .valueChanged)
 		
-		if fromFriendsScreen {
-			shouldRetry = true
-			maxRetryCount = 2
-			
-			title = "Friends"
-			
-			navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addFriend))
-			
-		} else if fromCardsScreen {
+		if fromCardsScreen {
 			shouldRetry = false
 			
 			title = "Cards"
@@ -68,32 +81,12 @@ class ListViewController: UITableViewController {
 	@objc private func refresh() {
 		refreshControl?.beginRefreshing()
 		if fromFriendsScreen {
-			FriendsAPI.shared.loadFriends { [weak self] result in
-				DispatchQueue.mainAsyncIfNeeded {
-                    self?.handleAPIResult(result.map({ (friends) in
-                        if User.shared?.isPremium == true {
-                            (UIApplication.shared.connectedScenes.first?.delegate as! SceneDelegate).cache.save(friends)
-                        }
-                        return friends.map { (friend) in
-                            ItemViewModel(friend: friend) {
-                                self?.select(friend: friend)
-                            }
-                        }
-                    }))
-				}
-			}
+            service?.loadItems(completion: handleAPIResult)
 		} else if fromCardsScreen {
-			CardAPI.shared.loadCards { [weak self] result in
-				DispatchQueue.mainAsyncIfNeeded {
-                    self?.handleAPIResult(result.map({ (cards) in
-                        cards.map { (card) in
-                            ItemViewModel(card: card) {
-                                self?.select(card: card)
-                            }
-                        }
-                    }))
-				}
-			}
+            service = CardsAPIItemsServiceAdapter(select: { [weak self] (card) in
+                self?.select(card: card)
+            }, api: CardAPI.shared)
+            service?.loadItems(completion: handleAPIResult)
 		} else if fromSentTransfersScreen || fromReceivedTransfersScreen {
 			TransfersAPI.shared.loadTransfers { [weak self, longDateStyle, fromSentTransfersScreen] result in
 				DispatchQueue.mainAsyncIfNeeded {
@@ -207,17 +200,6 @@ struct ItemViewModel {
     let text: String
     let detailText: String
     let select: ()->Void
-    init(_ item: Any, longDateStyle: Bool, selection: @escaping ()-> Void) {
-        if let friend = item as? Friend {
-            self = ItemViewModel(friend: friend, selection: selection)
-        } else if let card = item as? Card {
-            self = ItemViewModel(card: card, selection: selection)
-        } else if let transfer = item as? Transfer {
-            self = ItemViewModel(transfer: transfer, longDateStyle: longDateStyle, selection: selection)
-        } else {
-            fatalError("unknown item: \(item)")
-        }
-    }
 }
 
 extension ItemViewModel {
