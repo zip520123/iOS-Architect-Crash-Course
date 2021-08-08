@@ -157,7 +157,9 @@ class ListViewController: UITableViewController {
 	override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
 		let item = items[indexPath.row]
 		let cell = tableView.dequeueReusableCell(withIdentifier: "ItemCell") ?? UITableViewCell(style: .subtitle, reuseIdentifier: "ItemCell")
-		cell.configure(item, longDateStyle: longDateStyle)
+        let vm = ItemViewModel(item, longDateStyle: longDateStyle)
+		cell.configure(vm)
+        
 		return cell
 	}
 	
@@ -197,36 +199,62 @@ class ListViewController: UITableViewController {
 	}
 }
 
+struct ItemViewModel {
+    let text: String
+    let detailText: String
+    init(_ item: Any, longDateStyle: Bool) {
+        if let friend = item as? Friend {
+            self = ItemViewModel(friend: friend)
+        } else if let card = item as? Card {
+            self = ItemViewModel(card: card)
+        } else if let transfer = item as? Transfer {
+            self = ItemViewModel(transfer: transfer, longDateStyle: longDateStyle)
+        } else {
+            fatalError("unknown item: \(item)")
+        }
+    }
+}
 
+extension ItemViewModel {
+    init(friend: Friend) {
+        text = friend.name
+        detailText = friend.phone
+    }
+}
+
+extension ItemViewModel {
+    init(card: Card) {
+        text = card.number
+        detailText = card.holder
+    }
+}
+
+extension ItemViewModel {
+    init(transfer: Transfer, longDateStyle: Bool) {
+        let numberFormatter = Formatters.number
+        numberFormatter.numberStyle = .currency
+        numberFormatter.currencyCode = transfer.currencyCode
+        
+        let amount = numberFormatter.string(from: transfer.amount as NSNumber)!
+        text = "\(amount) • \(transfer.description)"
+        
+        let dateFormatter = Formatters.date
+        if longDateStyle {
+            dateFormatter.dateStyle = .long
+            dateFormatter.timeStyle = .short
+            detailText = "Sent to: \(transfer.recipient) on \(dateFormatter.string(from: transfer.date))"
+        } else {
+            dateFormatter.dateStyle = .short
+            dateFormatter.timeStyle = .short
+            detailText = "Received from: \(transfer.sender) on \(dateFormatter.string(from: transfer.date))"
+        }
+    }
+}
 
 extension UITableViewCell {
-	func configure(_ item: Any, longDateStyle: Bool) {
-		if let friend = item as? Friend {
-			textLabel?.text = friend.name
-			detailTextLabel?.text = friend.phone
-		} else if let card = item as? Card {
-			textLabel?.text = card.number
-			detailTextLabel?.text = card.holder
-		} else if let transfer = item as? Transfer {
-			let numberFormatter = Formatters.number
-			numberFormatter.numberStyle = .currency
-			numberFormatter.currencyCode = transfer.currencyCode
-			
-			let amount = numberFormatter.string(from: transfer.amount as NSNumber)!
-			textLabel?.text = "\(amount) • \(transfer.description)"
-			
-			let dateFormatter = Formatters.date
-			if longDateStyle {
-				dateFormatter.dateStyle = .long
-				dateFormatter.timeStyle = .short
-				detailTextLabel?.text = "Sent to: \(transfer.recipient) on \(dateFormatter.string(from: transfer.date))"
-			} else {
-				dateFormatter.dateStyle = .short
-				dateFormatter.timeStyle = .short
-				detailTextLabel?.text = "Received from: \(transfer.sender) on \(dateFormatter.string(from: transfer.date))"
-			}
-		} else {
-			fatalError("unknown item: \(item)")
-		}
+    func configure(_ vm: ItemViewModel) {
+        textLabel?.text = vm.text
+        detailTextLabel?.text = vm.detailText
+		
 	}
 }
